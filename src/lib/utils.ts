@@ -7,12 +7,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const RISK_COLORS: Record<string, string> = {
-    EXCELLENT: '#00A36C',
-    LOW_RISK: '#2ECC71',
-    MODERATE_RISK: '#F39C12',
-    MEDIUM_RISK: '#E67E22',
-    HIGH_RISK: '#E74C3C',
-    CRITICAL: '#8E44AD',
+    EXCELLENT:     '#3d8c6a',
+    LOW_RISK:      '#5a9b7a',
+    MODERATE_RISK: '#c49a2e',
+    MEDIUM_RISK:   '#b5622f',
+    HIGH_RISK:     '#a83c3c',
+    CRITICAL:      '#7a3060',
 };
 
 export const RISK_BG: Record<string, string> = {
@@ -66,3 +66,18 @@ export function getAlertRiskLevel(severity?: string): string | undefined {
         default: return undefined;
     }
 }
+
+export function formatRelativeTime(dateStr?: string | null): string {
+    if (!dateStr) return '—';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInHours = Math.abs(now.getTime() - date.getTime()) / 36e5;
+
+    if (diffInHours < 24) {
+        return `Aujourd'hui, ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute:'2-digit' })}`;
+    } else if (diffInHours < 48) {
+        return `Hier, ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute:'2-digit' })}`;
+    }
+    return formatDate(dateStr);
+}
+

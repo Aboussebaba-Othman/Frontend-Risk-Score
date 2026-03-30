@@ -11,6 +11,12 @@ export interface Company {
     city?: string;
     employeeCount?: number;
     status?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    shareCapital?: number;
+    annualRevenue?: number;
     tenantId?: number;
 }
 
@@ -86,6 +92,7 @@ export interface Recommendation {
     maxPaymentDays: number;
     guaranteesRequired: string;
     defaultRateRange: string;
+    justification?: string[];
 }
 
 // Alert types
@@ -98,9 +105,12 @@ export interface Alert {
     message: string;
     riskLevel?: RiskLevel;
     severity?: string;
+    type?: string;
     score?: number;
     status?: string;
-    createdAt?: string;
+    createdAt: string;
+    readAt?: string;
+    isRead?: boolean;
 }
 
 // Auth types

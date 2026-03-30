@@ -16,6 +16,15 @@ export const createCompany = async (data: Partial<Company>): Promise<Company> =>
     return res.data;
 };
 
+export const updateCompany = async (id: number, data: Partial<Company>): Promise<Company> => {
+    const res = await api.put<Company>(`/companies/${id}`, data);
+    return res.data;
+};
+
+export const deleteCompany = async (id: number): Promise<void> => {
+    await api.delete(`/companies/${id}`);
+};
+
 export const addFinancialData = async (companyId: number, data: Partial<FinancialData>): Promise<FinancialData> => {
     const res = await api.post<FinancialData>(`/companies/${companyId}/financials`, data);
     return res.data;

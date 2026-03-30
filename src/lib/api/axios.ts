@@ -6,7 +6,6 @@ const api = axios.create({
     timeout: 10000,
 });
 
-// Inject JWT token on every request
 api.interceptors.request.use((config) => {
     const token = useAuthStore.getState().token;
     if (token) {
@@ -15,7 +14,6 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// Handle 401 → logout
 api.interceptors.response.use(
     (response) => response,
     (error) => {

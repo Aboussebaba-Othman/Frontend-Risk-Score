@@ -1,26 +1,34 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Calculator, FileDown, Plus, Loader2 } from 'lucide-react';
-import { getCompany } from '@/lib/api/companies';
+import { ArrowLeft, Calculator, FileDown, Plus, Loader2, BrainCircuit, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { getCompany, deleteCompany } from '@/lib/api/companies';
 import { getLatestScore, getScoreHistory, getRecommendation, calculateScore } from '@/lib/api/scores';
 import { triggerReport } from '@/lib/api/reports';
 import RiskBadge from '@/components/ui/RiskBadge';
-import { formatDate, getRiskColor, getRiskLabel } from '@/lib/utils';
+import { formatDate, getRiskColor } from '@/lib/utils';
 import {
-    RadialBarChart, RadialBar, ResponsiveContainer,
-    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-    LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+    LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
 } from 'recharts';
+import { triggerAnalysis, getLatestAnalysis } from '@/lib/api/analysis';
+import SwotMatrix from '@/components/company/SwotMatrix';
+import ScoreGauge from '@/components/company/ScoreGauge';
+import ScoreRadar from '@/components/company/ScoreRadar';
+import RecommendationCard from '@/components/company/RecommendationCard';
 
 export default function CompanyDetailPage() {
     const { id } = useParams<{ id: string }>();
     const companyId = Number(id);
     const qc = useQueryClient();
+    const navigate = useNavigate();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [selectedScore, setSelectedScore] = useState<any>(null);
 
     const { data: company } = useQuery({ queryKey: ['company', companyId], queryFn: () => getCompany(companyId) });
     const { data: score } = useQuery({ queryKey: ['score', companyId], queryFn: () => getLatestScore(companyId), retry: false });
     const { data: history = [] } = useQuery({ queryKey: ['history', companyId], queryFn: () => getScoreHistory(companyId), retry: false });
     const { data: rec } = useQuery({ queryKey: ['rec', companyId], queryFn: () => getRecommendation(companyId), retry: false });
+    const { data: analysis, isLoading: isLoadingAnalysis } = useQuery({ queryKey: ['analysis', companyId], queryFn: () => getLatestAnalysis(companyId), retry: false });
 
     const scoreMutation = useMutation({
         mutationFn: () => calculateScore(companyId),
@@ -31,31 +39,43 @@ export default function CompanyDetailPage() {
         },
     });
 
+    const analysisMutation = useMutation({
+        mutationFn: () => triggerAnalysis(companyId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['analysis', companyId] });
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => deleteCompany(companyId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['companies'] });
+            navigate('/companies');
+        },
+    });
+
+    const handleDelete = () => {
+        if (window.confirm('Voulez-vous vraiment supprimer cette entreprise ? Cette action est irréversible.')) {
+            deleteMutation.mutate();
+        }
+    };
+
     if (!company) return <div className="text-gray-500 animate-pulse p-8">Chargement...</div>;
 
-    const overallScore = score?.overallScore ?? 0;
-    const riskColor = getRiskColor(score?.riskLevel);
+    const activeScore = selectedScore || score;
 
-    const gaugeData = [{ name: 'Score', value: overallScore, fill: riskColor }];
-
-    const radarData = [
-        { subject: 'Financier (40%)', value: score?.financialScore ?? 0 },
-        { subject: 'Paiement (35%)', value: score?.operationalScore ?? 0 },
-        { subject: 'Contexte (25%)', value: score?.marketScore ?? 0 },
-    ];
+    const overallScore = activeScore?.overallScore ?? 0;
+    const riskColor = getRiskColor(activeScore?.riskLevel);
 
     const historyData = history.slice().reverse().map((s, i) => ({
         name: `S${i + 1}`,
         score: s.overallScore,
         date: formatDate(s.scoredAt),
+        raw: s
     }));
 
-    const isAccord = rec?.decision?.startsWith('ACCORD');
-    const isRefus = rec?.decision === 'REFUS';
-    const decColor = isAccord ? '#2ECC71' : isRefus ? '#E74C3C' : '#F39C12';
-
     return (
-        <div className="space-y-5 animate-fade-in">
+        <div className="space-y-5 animate-fade-in relative">
             <div className="flex items-center justify-between">
                 <Link to="/companies" className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors text-sm">
                     <ArrowLeft size={15} /> Retour
@@ -65,6 +85,27 @@ export default function CompanyDetailPage() {
                         className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-white/10 hover:border-white/30 text-gray-300 hover:text-white transition-all">
                         <Plus size={13} /> Données financières
                     </Link>
+                    <Link
+                        to={`/companies/${companyId}/edit`}
+                        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-brand/30 hover:border-brand/60 text-brand-light hover:text-white transition-all">
+                        <Pencil size={13} /> Modifier
+                    </Link>
+                    <button
+                        onClick={handleDelete}
+                        disabled={deleteMutation.isPending}
+                        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-all font-semibold"
+                    >
+                        {deleteMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        Supprimer
+                    </button>
+                    <button
+                        onClick={() => analysisMutation.mutate()}
+                        disabled={analysisMutation.isPending}
+                        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition-all font-semibold"
+                    >
+                        {analysisMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+                        Générer SWOT
+                    </button>
                     <button
                         onClick={() => scoreMutation.mutate()}
                         disabled={scoreMutation.isPending}
@@ -82,6 +123,27 @@ export default function CompanyDetailPage() {
                 </div>
             </div>
 
+            {selectedScore && (
+                <div className="bg-brand/10 border border-brand/20 rounded-xl p-3 flex flex-col sm:flex-row justify-between items-center animate-fade-in shadow-[0_0_15px_rgba(30,80,160,0.15)]">
+                    <div className="flex items-center gap-3">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-light opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-brand text-white"></span>
+                        </span>
+                        <div>
+                            <span className="text-brand-light font-semibold text-sm">Mode Historique Actif</span>
+                            <span className="text-gray-400 text-xs ml-3 hidden sm:inline-block">Vous visualisez les données calculées le {formatDate(selectedScore.scoredAt)}</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setSelectedScore(null)}
+                        className="text-xs font-bold uppercase tracking-wider bg-brand/20 text-white px-4 py-1.5 rounded hover:bg-brand/40 transition-colors mt-2 sm:mt-0"
+                    >
+                        Fermer l'historique ✕
+                    </button>
+                </div>
+            )}
+
             <div className="glass-card p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div>
@@ -98,122 +160,51 @@ export default function CompanyDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="glass-card p-5 flex flex-col items-center">
-                    <h3 className="text-white font-semibold mb-1">Score Global</h3>
-                    <p className="text-gray-500 text-xs mb-4">CDC — 15 ratios</p>
-                    {score ? (
-                        <>
-                            <div className="relative w-44 h-44">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%"
-                                        startAngle={225} endAngle={-45} data={gaugeData}>
-                                        <RadialBar background={{ fill: '#1a2640' }} dataKey="value" cornerRadius={8} />
-                                    </RadialBarChart>
-                                </ResponsiveContainer>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-4xl font-bold" style={{ color: riskColor }}>{Math.round(overallScore)}</span>
-                                    <span className="text-gray-400 text-xs">/100</span>
-                                </div>
-                            </div>
-                            <div className="mt-4 text-center space-y-1.5 w-full">
-                                <p className="text-sm font-semibold" style={{ color: riskColor }}>{getRiskLabel(score.riskLevel)}</p>
-                                <p className="text-gray-500 text-xs">Rating: {score.riskRating ?? '—'}</p>
-                                {score.confidenceLevel != null && (
-                                    <div className="mt-2">
-                                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                            <span>Confiance</span><span>{score.confidenceLevel}%</span>
-                                        </div>
-                                        <div className="h-1.5 bg-navy-700 rounded-full">
-                                            <div className="h-full bg-brand rounded-full transition-all"
-                                                style={{ width: `${score.confidenceLevel}%` }} />
-                                        </div>
-                                    </div>
-                                )}
-                                {score.validUntil && (
-                                    <p className="text-gray-500 text-xs">Valide jusqu'au {formatDate(score.validUntil)}</p>
-                                )}
-                            </div>
-                        </>
-                    ) : (
-                        <div className="py-8 text-center">
-                            <p className="text-gray-500 text-sm">Aucun score calculé.</p>
-                            <button onClick={() => scoreMutation.mutate()} className="btn-primary mt-3 text-xs">
-                                Calculer maintenant
-                            </button>
-                        </div>
-                    )}
+                <div className={`glass-card p-5 flex flex-col relative transition-all duration-300 ${selectedScore ? 'border-brand/30 bg-brand/5' : ''}`}>
+                    <ScoreGauge score={activeScore} overallScore={overallScore} riskColor={riskColor} />
                 </div>
 
-                <div className="glass-card p-5">
-                    <h3 className="text-white font-semibold mb-1">Sous-scores CDC</h3>
-                    <p className="text-gray-500 text-xs mb-2">Décomposition par catégorie</p>
-                    {score ? (
-                        <ResponsiveContainer width="100%" height={200}>
-                            <RadarChart data={radarData} cx="50%" cy="50%">
-                                <PolarGrid stroke="rgba(255,255,255,0.1)" />
-                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                                <Radar dataKey="value" stroke={riskColor} fill={riskColor} fillOpacity={0.2} strokeWidth={2} />
-                            </RadarChart>
-                        </ResponsiveContainer>
-                    ) : <p className="text-gray-500 text-sm py-8 text-center">Calculez le score pour voir le radar.</p>}
-                    {score && (
-                        <div className="grid grid-cols-3 gap-2 mt-2 text-center">
-                            {[
-                                { label: 'Financier', value: score.financialScore, w: '40%' },
-                                { label: 'Paiement', value: score.operationalScore, w: '35%' },
-                                { label: 'Contexte', value: score.marketScore, w: '25%' },
-                            ].map(({ label, value, w }) => (
-                                <div key={label} className="bg-navy-700/50 rounded-lg p-2">
-                                    <p className="text-white text-lg font-bold">{value ?? '—'}</p>
-                                    <p className="text-gray-500 text-[10px]">{label}</p>
-                                    <p className="text-brand-light text-[9px]">{w}</p>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                <div className={`glass-card p-5 transition-all duration-300 ${selectedScore ? 'border-brand/30 bg-brand/5' : ''}`}>
+                    <ScoreRadar score={activeScore} riskColor={riskColor} />
                 </div>
 
-                <div className="glass-card p-5">
-                    <h3 className="text-white font-semibold mb-1">Recommandation CDC</h3>
-                    <p className="text-gray-500 text-xs mb-4">F-03 Décision de crédit</p>
-                    {rec ? (
-                        <>
-                            <div className="text-center rounded-xl py-3 mb-4 border"
-                                style={{ backgroundColor: `${decColor}15`, borderColor: `${decColor}30` }}>
-                                <p className="text-xl font-bold" style={{ color: decColor }}>{rec.decision}</p>
-                                <p className="text-xs text-gray-400 mt-0.5">{rec.decisionLabel}</p>
-                            </div>
-                            <dl className="space-y-2.5 text-sm">
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-500">Plafond crédit</dt>
-                                    <dd className="text-white font-medium text-right max-w-[55%] text-xs">{rec.creditLimitPolicy}</dd>
-                                </div>
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-500">Délai paiement</dt>
-                                    <dd className="text-white font-medium">{rec.maxPaymentDays} jours</dd>
-                                </div>
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-500">Garanties</dt>
-                                    <dd className="text-white font-medium text-right max-w-[55%] text-xs">{rec.guaranteesRequired}</dd>
-                                </div>
-                                <div className="flex justify-between">
-                                    <dt className="text-gray-500">Taux défaut</dt>
-                                    <dd className="text-white font-medium">{rec.defaultRateRange}</dd>
-                                </div>
-                            </dl>
-                        </>
-                    ) : (
-                        <p className="text-gray-500 text-sm py-8 text-center">Calculez le score pour voir la recommandation.</p>
-                    )}
+                <div className={`glass-card p-5 relative transition-all duration-300 ${selectedScore ? 'border-brand/30 bg-brand/5' : ''}`}>
+                    <RecommendationCard rec={rec} />
                 </div>
+            </div>
+
+            <div className="mt-2">
+                <h3 className="text-white font-semibold mb-4 bg-white/5 border border-white/10 px-4 py-2 rounded-lg inline-block text-sm">Matrice S.W.O.T (Analyse d'impacts globaux)</h3>
+                <SwotMatrix results={analysis?.results || []} isLoading={isLoadingAnalysis} />
             </div>
 
             {historyData.length > 1 && (
                 <div className="glass-card p-5">
-                    <h3 className="text-white font-semibold mb-4">Historique des scores</h3>
-                    <ResponsiveContainer width="100%" height={180}>
-                        <LineChart data={historyData}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-white font-semibold">Historique des scores</h3>
+                        <p className="text-gray-500 text-xs">Cliquez sur un point pour voir ses détails dans les cartes au-dessus</p>
+                    </div>
+                    
+                    <ResponsiveContainer width="100%" height={220}>
+                        <LineChart 
+                            data={historyData} 
+                            style={{ cursor: 'pointer' }}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            onClick={(e: any) => {
+                                if (!e) return;
+                                let rawData = null;
+                                if (e.activePayload?.[0]?.payload?.raw) {
+                                    rawData = e.activePayload[0].payload.raw;
+                                } else if (e.activeTooltipIndex !== undefined && e.activeTooltipIndex !== null && historyData[e.activeTooltipIndex]) {
+                                    rawData = historyData[e.activeTooltipIndex].raw;
+                                }
+                                
+                                if (rawData) {
+                                    setSelectedScore(rawData);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }
+                            }}
+                        >
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                             <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 11 }} />
                             <YAxis domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
@@ -222,17 +213,26 @@ export default function CompanyDetailPage() {
                                 labelStyle={{ color: '#9ca3af' }}
                                 itemStyle={{ color: '#fff' }}
                             />
-                            <Line type="monotone" dataKey="score" stroke="#1E50A0" strokeWidth={2.5}
-                                dot={{ fill: '#1E50A0', r: 4 }} activeDot={{ r: 6, fill: '#2563eb' }} />
+                            <Line 
+                                type="monotone" 
+                                dataKey="score" 
+                                stroke="#1E50A0" 
+                                strokeWidth={2.5}
+                                className="cursor-pointer"
+                                dot={{ fill: '#1E50A0', r: 4, pointerEvents: 'none' }} 
+                                activeDot={{ r: 7, fill: '#2563eb', stroke: '#fff', strokeWidth: 2, pointerEvents: 'none' }} 
+                            />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
             )}
 
-            {score?.notes && (
+            {activeScore?.notes && (
                 <div className="glass-card p-4 text-sm text-gray-400 border-l-2 border-brand/50">
-                    <span className="text-gray-500 text-xs uppercase tracking-wide">Notes CDC</span>
-                    <p className="mt-1">{score.notes}</p>
+                    <span className="text-gray-500 text-xs uppercase tracking-wide">
+                        Notes {selectedScore && `(du ${formatDate(selectedScore.scoredAt)})`}
+                    </span>
+                    <p className="mt-1">{activeScore.notes}</p>
                 </div>
             )}
         </div>

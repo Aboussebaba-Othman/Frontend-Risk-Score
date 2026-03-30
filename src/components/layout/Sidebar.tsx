@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/companies', label: 'Entreprises', icon: Building2 },
     { to: '/alerts', label: 'Alertes', icon: Bell },
     { to: '/reports', label: 'Rapports', icon: FileText },
@@ -50,7 +50,6 @@ export default function Sidebar() {
                 ))}
             </nav>
 
-            {/* User + Logout */}
             <div className="px-3 py-4 border-t border-white/5">
                 <div className="px-3 py-2 mb-2">
                     <p className="text-white text-sm font-medium truncate">{user?.username ?? 'Utilisateur'}</p>

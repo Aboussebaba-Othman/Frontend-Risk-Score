@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -17,8 +17,16 @@ type FormData = z.infer<typeof schema>;
 export default function LoginPage() {
     const [showPwd, setShowPwd] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { setToken, setUser } = useAuthStore();
+    const setToken = useAuthStore((s) => s.setToken);
+    const setUser = useAuthStore((s) => s.setUser);
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [isAuthenticated, navigate]);
 
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
         resolver: zodResolver(schema),
@@ -31,7 +39,7 @@ export default function LoginPage() {
             const res = await login(data);
             setToken(res.accessToken);
             setUser({ username: data.username });
-            navigate('/');
+            navigate('/dashboard');
         } catch {
             setError('Identifiants incorrects. Vérifiez votre nom d\'utilisateur et mot de passe.');
         }
@@ -107,6 +115,13 @@ export default function LoginPage() {
                             )}
                         </button>
                     </form>
+
+                    <div className="mt-6 text-center text-sm text-gray-400 border-t border-white/5 pt-4">
+                        Pas encore de compte ?{' '}
+                        <Link to="/register" className="text-brand hover:text-brand-light font-medium transition-colors">
+                            S'inscrire
+                        </Link>
+                    </div>
 
                     <p className="text-center text-gray-600 text-xs mt-6">
                         Risk Assessment Platform © 2026
